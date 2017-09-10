@@ -2,7 +2,7 @@
 
 結合 Django +  jQuery 實現無限卷軸 Infinite Scroll 📝
 
-* [Youtube Tutorial]()
+* [Youtube Tutorial](https://youtu.be/Gy9TjmM6R4Y)
 * [線上 Demo 網站](https://ptt-beauty-infinite-scroll.herokuapp.com/)
 
 本專案是透過 [Deploying_Django_To_Heroku_Tutorial](https://github.com/twtrubiks/Deploying_Django_To_Heroku_Tutorial) 修改完成，
