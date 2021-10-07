@@ -1,5 +1,7 @@
 # Ptt_Beauty_Infinite_Scroll
 
+如要參考 `python3.8` 以及 `django 3.12.4`, 請到 [django3](https://github.com/twtrubiks/ptt_beauty_infinite_scroll/tree/django3) 分支.
+
 結合 Django +  jQuery 實現無限卷軸 Infinite Scroll 📝
 
 * [Youtube Tutorial](https://youtu.be/Gy9TjmM6R4Y)
