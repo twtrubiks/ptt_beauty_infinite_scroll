@@ -1,0 +1,16 @@
+services:
+
+    migration:
+      build: .
+      command: bash -c "python manage.py makemigrations images && python manage.py migrate"
+      volumes:
+        - .:/ptt_beauty_infinite_scroll
+
+    app:
+      build: .
+      command: bash -c "python manage.py runserver 0.0.0.0:8000"
+      restart: always
+      ports:
+        - "8000:8000"
+      volumes:
+        - .:/ptt_beauty_infinite_scroll

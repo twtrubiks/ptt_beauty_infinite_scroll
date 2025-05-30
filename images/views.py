@@ -1,6 +1,6 @@
 from django.shortcuts import render
 from rest_framework import viewsets, status
-from rest_framework.decorators import list_route
+from rest_framework.decorators import action
 from rest_framework.response import Response
 
 from images.models import Image
@@ -19,7 +19,7 @@ class ImageViewSet(viewsets.ModelViewSet):
     serializer_class = ImageSerializer
 
     # [ GET ] /api/image/randoms/
-    @list_route(methods=['get'], url_path='randoms')
+    @action(detail=False, methods=['get'], url_path='randoms')
     def get_random_image(self, request):
         page = int(request.query_params.get('page'))
         start = (page - 1) * 10
