@@ -1,3 +1,4 @@
+// 僅作為 skeleton 數量的 UI hint；尾頁判定改以後端回傳的 next === null 為準。
 const PAGE_SIZE = 10;
 const RETRY_DELAYS_MS = [500, 1500, 4500];
 const PRELOAD_MARGIN = '400px 0px';
@@ -129,10 +130,12 @@ class ImageGallery {
         const skeletons = this.addSkeletons(PAGE_SIZE);
 
         try {
-            const newImages = await this.fetchWithRetry(this.currentPage);
+            const data = await this.fetchWithRetry(this.currentPage);
             this.removeSkeletons(skeletons);
 
-            if (!newImages || newImages.length === 0) {
+            const newImages = (data && data.results) || [];
+
+            if (newImages.length === 0) {
                 this.hasMore = false;
                 this.renderEndState();
                 return;
@@ -150,7 +153,7 @@ class ImageGallery {
             this.currentPage += 1;
             this.retryCount = 0;
 
-            if (newImages.length < PAGE_SIZE) {
+            if (data.next === null) {
                 this.hasMore = false;
                 this.renderEndState();
             } else {

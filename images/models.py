@@ -9,3 +9,4 @@ class Image(models.Model):
     class Meta:
         # managed = True
         db_table = 'Images'
+        ordering = ['-id']
