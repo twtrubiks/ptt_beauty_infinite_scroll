@@ -4,7 +4,9 @@ from images.models import Image
 
 
 class ImageSerializer(serializers.ModelSerializer):
+    url = serializers.CharField(source='Url')
+    createdAt = serializers.DateTimeField(source='CreateDate')
+
     class Meta:
         model = Image
-        # fields = '__all__'
-        fields = ('id', 'Url', 'CreateDate')
+        fields = ('id', 'url', 'createdAt')

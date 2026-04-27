@@ -5,10 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>圖片畫廊</title>
     {% load static %}
-    <!-- Link to the external CSS file -->
     <link rel="stylesheet" href="{% static 'stylesheets/index.css' %}" type="text/css"/>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
 </head>
 <body>
     <div class="loading-indicator" id="loadingIndicator">
@@ -27,11 +25,12 @@
         </div>
 
         <div class="load-more-trigger" id="loadMoreTrigger">
-            滾動載入更多
+            <div class="trigger-spinner" aria-hidden="true"></div>
         </div>
     </div>
 
-    <!-- Link to the external JavaScript file -->
+    <button id="backToTop" type="button" aria-label="回到頂部" title="回到頂部">↑</button>
+
     <script src="{% static 'js/index.js' %}" defer></script>
 </body>
 </html>
