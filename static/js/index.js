@@ -33,6 +33,7 @@ class ImageGallery {
     }
 
     init() {
+        this.lightbox = new Lightbox(this);
         this.setupInfiniteScroll();
         this.setupBackToTop();
         this.setupBeforeUnload();
@@ -115,15 +116,17 @@ class ImageGallery {
     }
 
     async loadInitialImages() {
-        await this.loadPage({ initial: true });
+        return this.loadPage({ initial: true });
     }
 
     async loadMoreImages() {
-        await this.loadPage({ initial: false });
+        return this.loadPage({ initial: false });
     }
 
     async loadPage({ initial }) {
-        if (this.loading || !this.hasMore) return;
+        if (this.loading || !this.hasMore) {
+            return { ok: true, added: 0, skipped: true };
+        }
         this.loading = true;
         this.showLoading(initial ? '載入中...' : '載入更多圖片...');
 
@@ -138,7 +141,7 @@ class ImageGallery {
             if (newImages.length === 0) {
                 this.hasMore = false;
                 this.renderEndState();
-                return;
+                return { ok: true, added: 0 };
             }
 
             if (initial) {
@@ -159,11 +162,15 @@ class ImageGallery {
             } else {
                 this.rearmObserver();
             }
+            return { ok: true, added: newImages.length };
         } catch (err) {
-            if (err.name === 'AbortError') return;
+            if (err.name === 'AbortError') {
+                return { ok: false, aborted: true };
+            }
             console.error('載入圖片失敗:', err);
             this.removeSkeletons(skeletons);
             this.renderRetryButton();
+            return { ok: false, error: err };
         } finally {
             this.loading = false;
             this.hideLoading();
@@ -200,6 +207,20 @@ class ImageGallery {
 
         const wrapper = document.createElement('div');
         wrapper.className = 'image-wrapper';
+        wrapper.tabIndex = 0;
+        wrapper.setAttribute('role', 'button');
+        wrapper.setAttribute('aria-label', `檢視圖片 ${image.id}`);
+        const openLightbox = () => {
+            const idx = this.images.findIndex(i => i.id === image.id);
+            if (idx >= 0 && this.lightbox) this.lightbox.open(idx);
+        };
+        wrapper.addEventListener('click', openLightbox);
+        wrapper.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                openLightbox();
+            }
+        });
 
         const img = document.createElement('img');
         img.src = image.url || '';
@@ -382,6 +403,331 @@ class ImageGallery {
                 this.abortController.abort();
             }
         });
+    }
+}
+
+class Lightbox {
+    constructor(gallery) {
+        this.gallery = gallery;
+        this.isOpen = false;
+        this.currentIndex = -1;
+        this.previousFocus = null;
+        this.savedBodyOverflow = '';
+        this.loadingNext = false;
+
+        this.overlayEl = null;
+        this.stageEl = null;
+        this.imgEl = null;
+        this.spinnerEl = null;
+        this.errorEl = null;
+        this.prevBtn = null;
+        this.nextBtn = null;
+        this.closeBtn = null;
+
+        this._onKeydown = this.handleKeydown.bind(this);
+    }
+
+    open(index) {
+        if (this.isOpen) return;
+        const images = this.gallery.images;
+        if (index < 0 || index >= images.length) return;
+
+        this.previousFocus = document.activeElement;
+        this.buildOverlay();
+        this.isOpen = true;
+        this.savedBodyOverflow = document.body.style.overflow;
+        document.body.style.overflow = 'hidden';
+        document.addEventListener('keydown', this._onKeydown);
+
+        this.showImage(index);
+        requestAnimationFrame(() => {
+            if (this.closeBtn) this.closeBtn.focus();
+        });
+    }
+
+    close() {
+        if (!this.isOpen) return;
+        this.isOpen = false;
+        document.removeEventListener('keydown', this._onKeydown);
+        document.body.style.overflow = this.savedBodyOverflow || '';
+        if (this.overlayEl) {
+            this.overlayEl.remove();
+        }
+        this.overlayEl = null;
+        this.stageEl = null;
+        this.imgEl = null;
+        this.spinnerEl = null;
+        this.errorEl = null;
+        this.prevBtn = null;
+        this.nextBtn = null;
+        this.closeBtn = null;
+
+        const focusBack = this.previousFocus;
+        this.previousFocus = null;
+        if (focusBack && typeof focusBack.focus === 'function') {
+            focusBack.focus();
+        }
+    }
+
+    buildOverlay() {
+        const overlay = document.createElement('div');
+        overlay.className = 'lightbox-overlay';
+        overlay.setAttribute('role', 'dialog');
+        overlay.setAttribute('aria-modal', 'true');
+        overlay.setAttribute('aria-label', '圖片檢視器');
+
+        const stage = document.createElement('div');
+        stage.className = 'lightbox-stage';
+
+        const spinner = document.createElement('div');
+        spinner.className = 'lightbox-spinner';
+        spinner.setAttribute('aria-hidden', 'true');
+
+        const img = document.createElement('img');
+        img.className = 'lightbox-img';
+        img.alt = '';
+
+        const error = document.createElement('div');
+        error.className = 'lightbox-error';
+        error.hidden = true;
+
+        const prevBtn = document.createElement('button');
+        prevBtn.type = 'button';
+        prevBtn.className = 'lightbox-nav lightbox-prev';
+        prevBtn.setAttribute('aria-label', '上一張');
+        prevBtn.textContent = '‹';
+
+        const nextBtn = document.createElement('button');
+        nextBtn.type = 'button';
+        nextBtn.className = 'lightbox-nav lightbox-next';
+        nextBtn.setAttribute('aria-label', '下一張');
+        nextBtn.textContent = '›';
+
+        const closeBtn = document.createElement('button');
+        closeBtn.type = 'button';
+        closeBtn.className = 'lightbox-close';
+        closeBtn.setAttribute('aria-label', '關閉');
+        closeBtn.textContent = '×';
+
+        prevBtn.addEventListener('click', (e) => { e.stopPropagation(); this.prev(); });
+        nextBtn.addEventListener('click', (e) => { e.stopPropagation(); this.next(); });
+        closeBtn.addEventListener('click', (e) => { e.stopPropagation(); this.close(); });
+        img.addEventListener('click', (e) => { e.stopPropagation(); });
+        overlay.addEventListener('click', (e) => {
+            if (e.target === overlay) this.close();
+        });
+
+        stage.appendChild(spinner);
+        stage.appendChild(img);
+        stage.appendChild(error);
+        overlay.appendChild(prevBtn);
+        overlay.appendChild(stage);
+        overlay.appendChild(nextBtn);
+        overlay.appendChild(closeBtn);
+        document.body.appendChild(overlay);
+
+        this.overlayEl = overlay;
+        this.stageEl = stage;
+        this.imgEl = img;
+        this.spinnerEl = spinner;
+        this.errorEl = error;
+        this.prevBtn = prevBtn;
+        this.nextBtn = nextBtn;
+        this.closeBtn = closeBtn;
+    }
+
+    showImage(index) {
+        const images = this.gallery.images;
+        if (!this.imgEl || index < 0 || index >= images.length) return;
+        this.currentIndex = index;
+        const image = images[index];
+        const url = image.url || '';
+
+        this.errorEl.hidden = true;
+        this.errorEl.innerHTML = '';
+        this.imgEl.classList.remove('loaded');
+        this.imgEl.style.display = '';
+        this.spinnerEl.style.display = '';
+        this.imgEl.alt = `圖片 ${image.id}`;
+
+        const token = Symbol('imgLoad');
+        this._loadToken = token;
+
+        const cleanup = () => {
+            this.imgEl.removeEventListener('load', onLoad);
+            this.imgEl.removeEventListener('error', onError);
+        };
+        const onLoad = () => {
+            if (this._loadToken !== token) return;
+            cleanup();
+            if (!this.isOpen) return;
+            this.spinnerEl.style.display = 'none';
+            this.imgEl.classList.add('loaded');
+        };
+        const onError = () => {
+            if (this._loadToken !== token) return;
+            cleanup();
+            if (!this.isOpen) return;
+            this.spinnerEl.style.display = 'none';
+            this.imgEl.style.display = 'none';
+            this.errorEl.hidden = false;
+            this.errorEl.textContent = '圖片無法顯示';
+        };
+        this.imgEl.addEventListener('load', onLoad);
+        this.imgEl.addEventListener('error', onError);
+
+        if (!url) {
+            onError();
+        } else {
+            this.imgEl.src = url;
+            // Cached image: load event may have fired before listener attached or
+            // not fire at all in some browsers. Fall back to checking complete state.
+            if (this.imgEl.complete) {
+                if (this.imgEl.naturalWidth > 0) onLoad();
+                else onError();
+            }
+        }
+
+        this.updateNavButtons();
+        this.preloadAdjacent(index);
+    }
+
+    updateNavButtons() {
+        if (!this.prevBtn || !this.nextBtn) return;
+        const images = this.gallery.images;
+        const atStart = this.currentIndex <= 0;
+        const atEnd = this.currentIndex >= images.length - 1;
+        this.prevBtn.disabled = atStart;
+        this.nextBtn.disabled = atEnd && !this.gallery.hasMore;
+        this.setNextLoading(this.loadingNext);
+    }
+
+    setNextLoading(isLoading) {
+        if (!this.nextBtn) return;
+        this.loadingNext = isLoading;
+        if (isLoading) {
+            this.nextBtn.classList.add('is-loading');
+            this.nextBtn.disabled = true;
+        } else {
+            this.nextBtn.classList.remove('is-loading');
+        }
+    }
+
+    preloadAdjacent(index) {
+        const images = this.gallery.images;
+        [index - 1, index + 1].forEach((i) => {
+            if (i < 0 || i >= images.length) return;
+            const url = images[i] && images[i].url;
+            if (!url) return;
+            const preloader = new Image();
+            preloader.src = url;
+        });
+    }
+
+    prev() {
+        if (this.currentIndex <= 0) return;
+        this.showImage(this.currentIndex - 1);
+    }
+
+    async next() {
+        if (this.loadingNext) return;
+        const images = this.gallery.images;
+        if (this.currentIndex < images.length - 1) {
+            this.showImage(this.currentIndex + 1);
+            return;
+        }
+        if (!this.gallery.hasMore) return;
+
+        this.setNextLoading(true);
+        const previousLength = images.length;
+        let result;
+        try {
+            result = await this.gallery.loadMoreImages();
+        } catch (err) {
+            this.setNextLoading(false);
+            this.showLoadMoreError();
+            return;
+        }
+        if (!this.isOpen) return;
+        this.setNextLoading(false);
+
+        if (result && result.ok === false && !result.aborted) {
+            this.showLoadMoreError();
+            return;
+        }
+        const newImages = this.gallery.images;
+        if (newImages.length > previousLength) {
+            this.showImage(this.currentIndex + 1);
+        } else {
+            this.updateNavButtons();
+        }
+    }
+
+    showLoadMoreError() {
+        if (!this.errorEl) return;
+        this.errorEl.hidden = false;
+        this.errorEl.innerHTML = '';
+        const text = document.createElement('p');
+        text.textContent = '載入下一頁失敗';
+        const retry = document.createElement('button');
+        retry.type = 'button';
+        retry.className = 'retry-button';
+        retry.textContent = '重試';
+        retry.addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.errorEl.hidden = true;
+            this.errorEl.innerHTML = '';
+            this.next();
+        });
+        this.errorEl.appendChild(text);
+        this.errorEl.appendChild(retry);
+    }
+
+    handleKeydown(e) {
+        if (!this.isOpen) return;
+        if (e.key === 'Escape') {
+            e.preventDefault();
+            this.close();
+            return;
+        }
+        if (e.key === 'ArrowLeft') {
+            e.preventDefault();
+            this.prev();
+            return;
+        }
+        if (e.key === 'ArrowRight') {
+            e.preventDefault();
+            this.next();
+            return;
+        }
+        if (e.key === 'Tab') {
+            this.handleFocusTrap(e);
+        }
+    }
+
+    handleFocusTrap(e) {
+        if (!this.overlayEl) return;
+        const focusables = [this.prevBtn, this.nextBtn, this.closeBtn]
+            .filter((el) => el && !el.disabled);
+        if (focusables.length === 0) {
+            e.preventDefault();
+            return;
+        }
+        const first = focusables[0];
+        const last = focusables[focusables.length - 1];
+        const active = document.activeElement;
+        const insideOverlay = this.overlayEl.contains(active);
+        if (e.shiftKey) {
+            if (!insideOverlay || active === first) {
+                e.preventDefault();
+                last.focus();
+            }
+        } else {
+            if (!insideOverlay || active === last) {
+                e.preventDefault();
+                first.focus();
+            }
+        }
     }
 }
 
