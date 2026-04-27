@@ -1,4 +1,4 @@
-FROM python:3.12-slim
+FROM python:3.13-slim
 LABEL maintainer twtrubiks
 ENV PYTHONUNBUFFERED 1
 RUN mkdir /ptt_beauty_infinite_scroll
